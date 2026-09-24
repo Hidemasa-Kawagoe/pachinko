@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../editor/board_layout.dart';
 import '../models/board_pattern.dart';
 import '../models/slot_machine.dart';
 import 'physics_world.dart';
@@ -47,13 +48,21 @@ const int kSlotJackpotPayout = 100; // 大当たり
 /// ゲーム全体のコントローラ。物理世界・玉数・統計・発射を管理する。
 class GameController extends ChangeNotifier {
   GameController({BoardPattern? pattern})
-      : world = PhysicsWorld(pattern: pattern ?? BoardPattern.phase1Standard) {
+      : _pattern = pattern ?? BoardPattern.phase1Standard {
+    world = PhysicsWorld(pattern: _pattern);
     _wireCallbacks();
     remainingBalls = initialBallCount;
   }
 
-  final PhysicsWorld world;
+  final BoardPattern _pattern;
+
+  late PhysicsWorld world;
   final GameStats stats = GameStats();
+
+  /// 編集モードで作ったカスタムレイアウト（null なら既定台）。
+  BoardLayout? customLayout;
+
+  bool get usingCustomLayout => customLayout != null;
 
   /// 初期弾数（この値だけを設定し、何度でもリセット可能）。
   int initialBallCount = 300;
@@ -145,12 +154,34 @@ class GameController extends ChangeNotifier {
   // --- 調整（分析タブ）---
 
   void updateConfig(BoardConfig newConfig) {
+    if (usingCustomLayout) return;
     world.applyConfig(newConfig);
     notifyListeners();
   }
 
   void resetConfigToDefault() {
+    if (usingCustomLayout) return;
     world.applyConfig(BoardConfig.defaults());
+    notifyListeners();
+  }
+
+  // --- 編集モードのレイアウト適用 ---
+
+  /// 編集モードで作ったレイアウトを台に反映する（null で既定台へ戻す）。
+  /// 物理世界を作り直し、持ち玉・統計をリセットする。
+  void applyLayout(BoardLayout? layout) {
+    customLayout = layout?.copy();
+    _rebuildWorld();
+  }
+
+  void _rebuildWorld() {
+    world = PhysicsWorld(pattern: _pattern, layout: customLayout);
+    _wireCallbacks();
+    world.clearBalls();
+    stats.reset();
+    remainingBalls = initialBallCount;
+    autoLaunching = false;
+    _autoAccum = 0.0;
     notifyListeners();
   }
 

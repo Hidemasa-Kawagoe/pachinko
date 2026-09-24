@@ -6,6 +6,7 @@ import '../engine/vec2.dart';
 import '../models/board_pattern.dart';
 import '../models/rotor.dart';
 import '../models/slot_machine.dart';
+import '../models/tulip.dart';
 
 /// 盤面（釘・チューリップ・入賞穴・玉）を描画する CustomPainter。
 class BoardPainter extends CustomPainter {
@@ -28,10 +29,10 @@ class BoardPainter extends CustomPainter {
     _paintBackground(canvas);
     _paintWalls(canvas);
     _paintWinningHoles(canvas);
-    _paintTulip(canvas);
+    _paintTulips(canvas);
     _paintRotors(canvas);
     _paintNails(canvas);
-    _paintSlot(canvas);
+    _paintSlots(canvas);
     _paintBalls(canvas);
     _paintFrame(canvas);
   }
@@ -83,10 +84,13 @@ class BoardPainter extends CustomPainter {
         _p(mark), 0.6 * _scale, Paint()..color = const Color(0xFFB23B3B));
   }
 
-  void _paintSlot(Canvas canvas) {
-    final sl = world.slot;
-    if (sl == null) return;
+  void _paintSlots(Canvas canvas) {
+    for (final sl in world.slots) {
+      _paintSlot(canvas, sl);
+    }
+  }
 
+  void _paintSlot(Canvas canvas, SlotMachine sl) {
     final blinkOn = sl.isBlinking && ((sl.blinkTimer * 8).floor().isEven);
 
     // 本体パネル（センサーの少し下）
@@ -292,8 +296,13 @@ class BoardPainter extends CustomPainter {
     }
   }
 
-  void _paintTulip(Canvas canvas) {
-    final t = world.tulip;
+  void _paintTulips(Canvas canvas) {
+    for (final t in world.tulips) {
+      _paintTulip(canvas, t);
+    }
+  }
+
+  void _paintTulip(Canvas canvas, Tulip t) {
     final open = t.animT;
 
     // センサーの光（開いているほど強い）

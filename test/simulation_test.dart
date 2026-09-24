@@ -300,7 +300,7 @@ void main() {
       ..resetGame();
 
     // センサー位置へ直接玉を置いて入賞させる（狙って当てるのは不安定なため）。
-    final slot = c.world.slot!;
+    final slot = c.world.slots.first;
     c.world.balls.add(Ball(
       pos: slot.center,
       vel: const Vec2(0, 5),

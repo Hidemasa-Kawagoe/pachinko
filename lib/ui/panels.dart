@@ -144,37 +144,48 @@ class AnalysisPanel extends StatelessWidget {
               Text('チューリップ手前の釘（命釘）の調整',
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 4),
-              Text(
-                '間隔を広げるとチューリップに入りやすく、狭めると入りにくくなります。',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 12),
-              _ConfigSlider(
-                label: '命釘の間隔',
-                value: cfg.lifeNailGap,
-                min: BoardConfig.gapMin,
-                max: BoardConfig.gapMax,
-                onChanged: (v) {
-                  final c = cfg.copy()..lifeNailGap = v;
-                  controller.updateConfig(c);
-                },
-              ),
-              _ConfigSlider(
-                label: '命釘の高さ（チューリップからの距離）',
-                value: cfg.lifeNailHeight,
-                min: BoardConfig.heightMin,
-                max: BoardConfig.heightMax,
-                onChanged: (v) {
-                  final c = cfg.copy()..lifeNailHeight = v;
-                  controller.updateConfig(c);
-                },
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: controller.resetConfigToDefault,
-                icon: const Icon(Icons.settings_backup_restore),
-                label: const Text('釘を標準配置に戻す'),
-              ),
+              if (controller.usingCustomLayout)
+                Text(
+                  'カスタム台（編集モードで作成）を使用中のため無効です。'
+                  '釘の調整は編集モードで行ってください。',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: Colors.orange),
+                )
+              else ...[
+                Text(
+                  '間隔を広げるとチューリップに入りやすく、狭めると入りにくくなります。',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
+                _ConfigSlider(
+                  label: '命釘の間隔',
+                  value: cfg.lifeNailGap,
+                  min: BoardConfig.gapMin,
+                  max: BoardConfig.gapMax,
+                  onChanged: (v) {
+                    final c = cfg.copy()..lifeNailGap = v;
+                    controller.updateConfig(c);
+                  },
+                ),
+                _ConfigSlider(
+                  label: '命釘の高さ（チューリップからの距離）',
+                  value: cfg.lifeNailHeight,
+                  min: BoardConfig.heightMin,
+                  max: BoardConfig.heightMax,
+                  onChanged: (v) {
+                    final c = cfg.copy()..lifeNailHeight = v;
+                    controller.updateConfig(c);
+                  },
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: controller.resetConfigToDefault,
+                  icon: const Icon(Icons.settings_backup_restore),
+                  label: const Text('釘を標準配置に戻す'),
+                ),
+              ],
             ],
           ),
         );
@@ -273,9 +284,24 @@ class _SettingsPanelState extends State<SettingsPanel> {
               const SizedBox(height: 8),
               Text(
                 'Phase1 は「中央スロット＋左右の回転体＋下部のチューリップ＋左右の入賞穴」'
-                'の1パターンに固定です。複数パターンの切り替えは次フェーズで対応します。',
+                'の1パターンに固定です。配置は「編集」モードでブロック単位に変更できます。',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
+              if (widget.controller.usingCustomLayout) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text('現在：カスタム台（編集モードで作成）を使用中',
+                          style: TextStyle(color: Colors.orange)),
+                    ),
+                    OutlinedButton(
+                      onPressed: () => widget.controller.applyLayout(null),
+                      child: const Text('既定台へ戻す'),
+                    ),
+                  ],
+                ),
+              ],
               const Divider(height: 32),
               Text('入賞球（Phase1 固定値）',
                   style: Theme.of(context).textTheme.titleMedium),

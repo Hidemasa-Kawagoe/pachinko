@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import '../editor/board_layout.dart';
 import '../models/ball.dart';
 import '../models/board_pattern.dart';
 import '../models/obstacles.dart';
@@ -17,12 +18,16 @@ class PhysicsWorld {
   final BoardPattern pattern;
   BoardConfig config;
 
+  /// 指定すると、釘・入賞穴・チューリップ・スロット・回転体はこのレイアウトを
+  /// コンパイルして使う（＝編集モードで作った台）。null なら [pattern] の既定配置。
+  BoardLayout? layout;
+
   late List<Segment> walls;
   late List<Nail> nails;
-  late Tulip tulip;
+  late List<Tulip> tulips;
   late List<WinningHole> holes;
   List<Rotor> rotors = [];
-  SlotMachine? slot;
+  List<SlotMachine> slots = [];
 
   final List<Ball> balls = [];
   final math.Random _rng;
@@ -61,6 +66,7 @@ class PhysicsWorld {
   PhysicsWorld({
     required this.pattern,
     BoardConfig? config,
+    this.layout,
     int seed = 20250903,
   })  : config = config ?? BoardConfig.defaults(),
         _rng = math.Random(seed) {
@@ -69,15 +75,31 @@ class PhysicsWorld {
 
   void _rebuildAll() {
     walls = pattern.buildWalls();
-    nails = pattern.buildNails(config);
-    tulip = pattern.buildTulip(config);
-    holes = pattern.buildWinningHoles();
-    rotors = pattern.buildRotors();
-    slot = pattern.buildSlot();
+    final lay = layout;
+    if (lay != null) {
+      final c = lay.compile();
+      nails = c.nails;
+      holes = c.holes;
+      tulips = c.tulips;
+      slots = c.slots;
+      rotors = c.rotors;
+    } else {
+      nails = pattern.buildNails(config);
+      holes = pattern.buildWinningHoles();
+      tulips = [pattern.buildTulip(config)];
+      rotors = pattern.buildRotors();
+      final s = pattern.buildSlot();
+      slots = s != null ? [s] : [];
+    }
   }
 
+  /// 互換用：主チューリップ（無いレイアウトなら例外）。
+  Tulip get tulip => tulips.first;
+
   /// 調整パラメータを反映して釘配置のみ再生成する（玉・チューリップ状態は維持）。
+  /// カスタムレイアウト使用中は無効（釘はレイアウト側で管理する）。
   void applyConfig(BoardConfig newConfig) {
+    if (layout != null) return;
     config = newConfig.copy();
     nails = pattern.buildNails(config);
   }
@@ -117,11 +139,12 @@ class PhysicsWorld {
       _accumulator -= _subStep;
       guard++;
     }
-    tulip.stepAnim(frame);
+    for (final t in tulips) {
+      t.stepAnim(frame);
+    }
 
     // スロットの回転・演出を進め、停止結果が出たら通知する。
-    final sl = slot;
-    if (sl != null) {
+    for (final sl in slots) {
       sl.step(frame);
       final res = sl.takePendingResult();
       if (res != null) onSlotResult?.call(res);
@@ -131,11 +154,13 @@ class PhysicsWorld {
   }
 
   void _subStepUpdate(double h) {
-    final petals = tulip.petalSegments();
+    final petalSets = [for (final t in tulips) t.petalSegments()];
     final bladeSets = [for (final r in rotors) r.bladeSegments()];
-    final sl = slot;
     // スロットは回転中・演出中は硬い円として玉をはじく（idle のときだけセンサー）。
-    final slotSolid = sl != null && !sl.isIdle;
+    final solidSlots = [
+      for (final sl in slots)
+        if (!sl.isIdle) sl
+    ];
 
     for (final ball in balls) {
       if (!ball.alive) continue;
@@ -155,8 +180,10 @@ class PhysicsWorld {
       for (final s in walls) {
         _collideSegment(ball, s);
       }
-      for (final s in petals) {
-        _collideSegment(ball, s);
+      for (final petals in petalSets) {
+        for (final s in petals) {
+          _collideSegment(ball, s);
+        }
       }
       for (final n in nails) {
         _collideNail(ball, n);
@@ -164,7 +191,7 @@ class PhysicsWorld {
       for (var ri = 0; ri < rotors.length; ri++) {
         _collideRotor(ball, rotors[ri], bladeSets[ri]);
       }
-      if (slotSolid) {
+      for (final sl in solidSlots) {
         _collideSolidCircle(ball, sl.center, sl.sensorRadius, 0.3);
       }
 
@@ -348,23 +375,31 @@ class PhysicsWorld {
       }
 
       // スロット入賞センサー（idle のときだけ受け付け → 1回転開始）
-      final sl = slot;
-      if (sl != null &&
-          sl.isIdle &&
-          ball.pos.distanceTo(sl.center) < sl.sensorRadius + ball.radius * 0.5) {
-        ball.alive = false;
-        sl.startSpin();
-        onSlotStart?.call();
-        continue;
+      var consumed = false;
+      for (final sl in slots) {
+        if (sl.isIdle &&
+            ball.pos.distanceTo(sl.center) <
+                sl.sensorRadius + ball.radius * 0.5) {
+          ball.alive = false;
+          sl.startSpin();
+          onSlotStart?.call();
+          consumed = true;
+          break;
+        }
       }
+      if (consumed) continue;
 
       // チューリップ入賞センサー
-      if (ball.pos.distanceTo(tulip.sensorCenter) < tulip.sensorRadius) {
-        ball.alive = false;
-        tulip.toggle();
-        onTulipIn?.call(tulip);
-        continue;
+      for (final t in tulips) {
+        if (ball.pos.distanceTo(t.sensorCenter) < t.sensorRadius) {
+          ball.alive = false;
+          t.toggle();
+          onTulipIn?.call(t);
+          consumed = true;
+          break;
+        }
       }
+      if (consumed) continue;
 
       // 入賞穴（誘導釘の喉元へ来た時点で取り込む。玉半径ぶん広げて
       // 「弧と穴の間で玉が留まる」状態になる前に入賞として処理する）
